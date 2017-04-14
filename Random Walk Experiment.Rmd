@@ -1,0 +1,144 @@
+---
+title: "Random Walk Experiment"
+author: "Yuanyuan Pan"
+date: "October 2, 2016"
+output: pdf_document
+---
+In this experiment build your intuition about probabilities associated with experiment of simulated tossing a fair coin multiple times.
+
+## 1. Convergence of probability of tail to 0.5
+Check that frequency of “Tails” (outcome equals 1) converges to 0.5 as the number of tosses grows.
+
+ **Fairness of the coin means the probability of getting a "Tail" and a "Head" are equal, as 0.5.**
+
+
+If $X_i$ is an outcome number $i$ of tossing a fair coin, i.e.$X_i=1$ if the outcome is “Tails” and $X_i=0$ if the outcome is “Heads”, then trajectory of number of tails in $n$ coin tosses is
+
+$$ T(n) = \sum^n_{i=1}X_i, n = 1,...,N$$
+
+Corresponding trajectory of frequencies of tails is
+
+$$ f(n) = \dfrac{T(n)}{n}, n = 1,...,N$$
+
+Generate the ramdon sample, and using set.seed() to make the process reproducible. 
+
+```{r}
+set.seed(12345) # set the seed to make sure that other people can get the same result 
+nFlips = 100000 # set the how many times should they flip. 
+Flips<-sample(0:1,nFlips,repl=T) # generate ramdom sample 
+# or rbinom(nFlips,1,.5) or (runif(nFlips)<.5) # generate ramdom sample through binomial 
+# distribution
+Trajectory<-cumsum(Flips) #cumulative summation 
+freq<-Trajectory/(1:nFlips) # calculate the cumulative frequency
+plot(1:length(freq),freq, ylim=c(.4,1),type="l",ylab="Frequency",xlab="Sample Length") 
+#make the plot of cumulative frequency
+lines(c(0,nFlips),c(.5,.5)) # add the middle line with 0.5 frequency
+plot(1:4000,freq[1:4000], ylim=c(.4,1),type="l",ylab="Frequency",xlab="Sample Length")
+#make the plot of cumulative frequency with less sample.
+lines(c(0,4000),c(.5,.5))  # add the middle line with 0.5 frequency
+```
+
+**From the graphs we can see that then $n$ is small, the probability is far from 0.5, while as $n$ increase and become very large, the probability will converge to 0.5.** 
+
+## 2. Check your intuition about random walks
+
+Let $X_i=1$ if the outcome of i-th coin flip is “Tails” and $X_i = -1$ if the outcome is “Heads”.
+Cumulative sequence of $X_i$ is called a trajectory of random walk:
+$$T(n) = \sum^n_{i=1} X_i, n = 1,...,N$$
+
+### 2.1. One trajectory
+
+Create trajectory of wealth in a game which either pays $1 with probability 0.5 or results in loss of $1 on each step.
+
+Assume that the game is played 1,000,000 times.
+Use the same seed.
+Increase the number of flips to 1,000,000.
+```{r}
+nFlips<-1000000;
+set.seed(12345)
+Flips<-(sample(0:1,nFlips,repl=T)-.5)*2
+```
+One alternative way to generage Flips could be 
+```{r}
+nFlips<-1000000;
+set.seed(12345)
+Flips<- (rbinom(nFlips,1,.5)-0.5)*2
+```
+**Intuition about random walk**
+
+
+* The trajectory of wealth will deviate from zero fist, and randomly go towards one side of the zero line, but not so far. As n increases, the trajectory will walk towards zero and start the similar process again. 
+I
+* in the beginning, the random walk will stay mostly on one side, while when it reach the zero line, it will stay mostly on one side again. As n increase to infinity, it could stay half above and half below, however, when n is limited, it's hard to decide.
+
+```{r}
+oneTrajectory<-cumsum(Flips)
+plot(oneTrajectory, ylim=c(-1000,1000),type="l")
+lines(c(0,nFlips),c(0,0))
+```
+
+From the picture we can tell that the random walk is mostly above line 0 , although n is already large enough, and the walk path is about to reach 1000, which is as expected before the similation.
+
+### 2.2 Multiple trajectories
+
+
+* The probability of $P(|N_h - N_t|<5)$ in 500 coin flips is 
+
+$$
+P[N_h-(500-N_h)) <5 and ((500-N_h)- N_h) <5] = P( 247.5< N_h < 252.5)\\
+ = P( 248 \leq N_h \leq 252)
+$$
+
+```{r}
+pbinom(252,size = 500, prob = 0.5) - pbinom(248,size = 500, prob = 0.5)
+```
+
+* The probability of $P(|N_h - N_t|)>25$ in 500 coin flips is
+
+$$
+P[N_h-(500-N_h)>25] + P[(500-N_h)- N_h>25] = P( N_h> 262.5)+P(N_h < 237.5)\\
+ = P( N_h \geq 263) +P(N_h \leq 237)
+$$
+
+```{r}
+pbinom(237,size = 500, prob = 0.5) + (1 - pbinom(263,size = 500, prob =0.5))
+```
+
+Turn the sample Flips of 1,000,000 coin flips into 2000 random walk samples, each is 500 long.
+Calculate 2000 cumulative trajectories.
+
+Each trajectory at each point shows the difference between the number of “Tails” and the number of “Heads”.
+
+Estimate the probabilities of such deviations.
+
+```{r}
+Trajectories2000by500<-t(apply(matrix(Flips,ncol=500),1,cumsum))
+dim(Trajectories2000by500)
+
+(probability.less.than.5<-sum(abs(Trajectories2000by500[,500])<5)/2000)
+ 
+(probability.greater.than.25<-sum(abs(Trajectories2000by500[,500])>=25)/2000)
+```
+
+The probability that Trajectories end less than 5 points away from zero is 0.18 in this simulation, while the probability that Trajectories end more than 25 points away from zero is 0.25 in this simulation.
+
+The result is quite close to my calculation of the probability.
+
+### 2.3 Time on one side
+
+**Since random walk is a process which cannot converge, the time expected to spend on one side of zero cannot be decided**
+
+
+Use matrix Trajectories2000by500 to estimate distribution of time spend by random walk on positive side.
+```{r}
+timeAbove<-apply(Trajectories2000by500,1,function(z) sum(z>0))
+hist(timeAbove)
+```
+
+From the result, my intuition is right. 
+
+The result shows that many random walk with 500 steps spend all the time above or below the zero line. rest of walks' time above zero line is almost a uniform distribution. However, the mean of all those walks' time could be around 250. 
+
+The law could be arcsine law, which has a very complex proof.
+
+

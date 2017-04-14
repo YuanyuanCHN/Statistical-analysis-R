@@ -1,0 +1,352 @@
+---
+title: "Randomness"
+author: "Yuanyuan Pan"
+date: "October 9, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This project helps understanding simulation of pseudo-random and quasi-random numbers and application of Monte Carlo method.
+
+## Part 1. Generate uniformly distributed random numbers
+### 1.1 Use runif()
+
+Function runif(N,a,b) simulates \(N\) pseudo-random numbers uniformly distributed on \([a,b]\).
+```{r}
+set.seed(15)
+Sample<-runif(1000,0,1)
+```
+
+### 1.2 Simulate Uniform Random Sample on [0,1] Using Random.org.
+From Random.org you can download binary sequence using library random.
+
+This library is an interface to the web service of Random.org.
+
+```{r}
+library(random)
+nFlips<-1000
+dataFromRandom<-randomNumbers(n=nFlips, min=0, max=1, col=1, base=2, check=TRUE)
+head(dataFromRandom)
+```
+### Turn sequence of {0,1} into uniform random numbers on [0,1].
+
+```{r}
+suppressMessages(library(compositions))
+
+```
+Create function that turns a sequence of zeros and ones of length n into decimal form.
+```{r}
+bin2dec<-function(Bin.Seq){
+  unbinary(paste(Bin.Seq,collapse=""))  
+}
+bin2dec(c(1,1,1,1,1,0))
+```
+Turn the sequence of zeros and ones dataFromRandom of length 1000 into a matrix with 10 columns and 100 rows
+
+```{r}
+Binary.matrix<-matrix(dataFromRandom,ncol=10)
+head(Binary.matrix)
+```
+
+Transform each row of the matrix into decimal format using bin2dec() and divide the numbers by \(2^{10}\) to make real numbers in [0,1].
+
+```{r}
+Decimal.Sample<-apply(Binary.matrix,1,bin2dec)/2^10
+Decimal.Sample
+```
+All numbers in Decimal.Sample are between 0 and 1. This is your own equivalent of the sample obtained by runif().
+
+## Part 2. Test random number generator
+### 2.1 Test uniformity of distribution of both random number generators
+#### 2.1.1. Sample obtained by runif()
+Analyze what was simulated by first looking at the histogram.
+```{r}
+Sample.histogram<-hist(Sample)
+Sample.histogram
+```
+**This histogram tell me that the thii distribution is close to a uniform distribution. It is consistent with the goal of simulation ** 
+
+Estimate mean and standard deviation of Sample.histogram$density.
+
+```{r}
+(Sample.histogram.mean<-mean(Sample.histogram$density))
+(Sample.histogram.sd<-sd(Sample.histogram$density))
+plot(Sample.histogram,freq=FALSE)
+abline(h=Sample.histogram.mean)
+abline(h=Sample.histogram.mean+1.96*Sample.histogram.sd,col="red",lty=2)
+abline(h=Sample.histogram.mean-1.96*Sample.histogram.sd,col="red",lty=2)
+
+```
+
+**This graph tell me that all the value of intervals is within the mean's confidential interval.**
+
+Estimate moments of Sample.
+
+```{r}
+(Sample.mean<-mean(Sample))
+(Sample.variance<-var(Sample))
+```
+**The mean is about half of the interval, which is different from histogram's mean; and the sample variance is close to the histogram's sample variance**
+
+
+Check the summary of the simulated sample.
+```{r}
+summary(Sample)
+```
+** I think the best way of estimating uniform distribution over unknown interval is using the maximum and minimun of the sample**
+
+####2.1.2. Repeat the same steps to test uniformity of the sample created from Random.org data.
+
+```{r}
+Sample.histogram <- hist(Decimal.Sample)
+(Sample.histogram.mean<-mean(Sample.histogram$density))
+(Sample.histogram.sd<-sd(Sample.histogram$density))
+plot(Sample.histogram,freq=FALSE)
+abline(h=Sample.histogram.mean)
+abline(h=Sample.histogram.mean+1.96*Sample.histogram.sd,col="red",lty=2)
+abline(h=Sample.histogram.mean-1.96*Sample.histogram.sd,col="red",lty=2)
+
+(Sample.mean<-mean(Decimal.Sample))
+(Sample.variance<-var(Decimal.Sample))
+```
+###2.2. Test independence of the sequence of zeros and ones
+####Turning point test
+
+Turning point test is used to check if a sequence of numbers is i.i.d. (independent identically distributed).
+The test is based on the number of turning points in the sequence.
+The number of turning points is the number of maxima and minima in the series.
+Let \(T\) be the number of turning points in a sample of length \(n\) large enough.
+Then the statistic of the test \[z=\frac{T-\frac{2n-4}{3}}{\sqrt{\frac{16n-29}{90}}}\] has standard normal distribution.
+
+
+The test is performed by turning.point.test() in package randtests
+```{r}
+library(randtests)
+turning.point.test(Decimal.Sample)
+```
+
+The null hypothesis tested by turning point test is randomness (i.i.d.). The alternative is serial correlation in the sequence. Thus, if the test returns a very small p-value the randomness needs to be rejected.
+
+###2.3. Test frequency by Monobit test
+
+To perform Monobit test you need to transform your {0,1} sample into {-1,1}.
+Illustrate the test on the sequence simulated in the previous lecture.
+
+We created the sequence of coin tosses:
+
+```{r}
+dataFromRandom.plusminus1<-(dataFromRandom-.5)*2
+```
+Recall from the lecture notes that monobit test of randomness is based on the statistic
+
+\[S=\frac{|\sum_{i=1}^{N}R_i|}{\sqrt{2N}} \sim erfc,\]
+
+where \(R_i\) is the i-th random number, summation is done over all \(N=nFlips\) random numbers.
+
+erfc is the complimentary error function, a special function complimentary to error function erf=1-erfc.
+
+Both functions can be easily calculated in R with the help of pnorm:
+
+```{r}
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+erfc <- function(x) 2 * pnorm(x * sqrt(2), lower = FALSE)
+```
+
+The complimentary error function looks like:
+
+```{r}
+plot(seq(from=-3,to=3,by=.05),erfc(seq(from=-3,to=3,by=.05)),type="l",xlab="x",ylab="erfc(x")
+```
+
+To test the sequence \(R_i\) check the value erfc(S).
+
+If the P-value or erfc(S) is less or equal than 0.01 the sequence fails the test.
+
+```{r}
+erfc(abs(sum(dataFromRandom.plusminus1)/sqrt(2*nFlips)))
+```
+
+The test shows that our sequence passes.
+
+Now check each of the sub-sequences created earlier:
+
+```{r}
+plot(erfc(abs(apply(matrix(dataFromRandom.plusminus1,ncol=50),1,sum))/sqrt(2*50)),ylab="P-values of 20 runs")
+```
+
+How many runs out of 20 fail the test?
+
+```{r}
+sum(erfc(abs(apply(matrix(dataFromRandom.plusminus1,ncol=50),1,sum))/sqrt(2*50))<=.01)
+```
+
+## Part 3. Invent a random number generator
+
+Think about possible sources of true or pseudo-random sequences of {0,1} and choose one or two of them.
+Conduct the tests described in the previous section.
+
+### 1 Random number generator
+Get the total rides of Chicago CTA buses everyday. If the the number is odd, generate 1; while if the number is even, generate 0. Then transform it to uniform distrubution using the method above.
+
+### 2 Generate and transform random numbers
+Firstly, download the bus riding information from "https://data.cityofchicago.org/Transportation/CTA-Ridership-Daily-Boarding-Totals/6iiy-9s97"
+
+```{r}
+Bus <- read.csv("CTA.csv")
+Sample_Yuanyuan <- Bus$bus %% 2
+head(Sample_Yuanyuan)
+suppressMessages(library(compositions))
+bin2dec<-function(Bin.Seq){
+  unbinary(paste(Bin.Seq,collapse=""))  
+}
+Binary.matrix<-matrix(Sample_Yuanyuan[2001:3000],ncol=10)
+head(Binary.matrix)
+Decimal.Sample<-apply(Binary.matrix,1,bin2dec)/2^10
+Decimal.Sample
+```
+### 3 Test the uniform
+
+```{r}
+Sample.histogram <- hist(Decimal.Sample)
+(Sample.histogram.mean<-mean(Sample.histogram$density))
+(Sample.histogram.sd<-sd(Sample.histogram$density))
+plot(Sample.histogram,freq=FALSE)
+abline(h=Sample.histogram.mean)
+abline(h=Sample.histogram.mean+1.96*Sample.histogram.sd,col="red",lty=2)
+abline(h=Sample.histogram.mean-1.96*Sample.histogram.sd,col="red",lty=2)
+
+```
+
+This transformed random numbers can be taken as uniform distrubution.  
+
+### 4 Frequency test
+```{r}
+Sample.plusminus1 <- (Sample_Yuanyuan[2001:3000]-.5)*2
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+erfc <- function(x) 2 * pnorm(x * sqrt(2), lower = FALSE)
+erfc(abs(sum(Sample.plusminus1)/sqrt(2*length(Sample.plusminus1))))
+plot(erfc(abs(apply(matrix(Sample.plusminus1,ncol=50),1,sum))/sqrt(2*50)),ylab="P-values of 20 runs")
+sum(erfc(abs(apply(matrix(Sample.plusminus1,ncol=50),1,sum))/sqrt(2*50))<=.01)
+```
+
+This random number faild to pass the frequency test, but it's not very bad. 
+
+### 5 Results of the turning point test
+```{r}
+turning.point.test(Decimal.Sample)
+```
+
+This random number generator failed to pass the test, but the p-value is not very large, could be considered as acceptable. 
+
+
+## Part 4. Monte Carlo Method
+
+### 4.1. Scratch off quote of the day: fuction download
+```{r}
+datapath<-getwd()
+load(file=paste(datapath,'ScratchOffMonteCarlo.rda',sep='/'))
+```
+###4.2. Simulate pseudo-random poins \([x,y]\) on \([0,100] \times [0,100]\)
+
+
+Select a number o points nSample.
+
+Simulate a sample of length 2*nSample from uniform distribution on [0,100] and turn it into a \((nSample \times 2)\) matrix.
+
+```{r}
+my.seed = 1234
+set.seed(my.seed)
+nSample = 1000
+xy<-runif(2*nSample,0,100)
+xy<-matrix(xy,ncol=2)
+```
+
+Throw nSample simulated points on square \([0,100] \times [0,100]\) to scratch off some of yellow paint.
+
+```{r}
+nSample<-19000
+my.seed<-876543
+set.seed(my.seed)
+xy<-runif(2*nSample,0,100)
+xy<-matrix(xy,ncol=2)
+head(xy)
+ScratchOffMonteCarlo(xy)
+```
+
+**By changing nSample and my.seed try to make the quote of the day readable, at least 19000 sample size and 85.4% open to read the words as "THe purpose of models is not to fit the data but to sharpen the questions. - Samnuel karlin"**
+
+###4.3. Simulate quasi-random poins \([x,y]\) on \([0,100] \times [0,100]\)
+function runif() can be replaced by sobol() from library randtoolbox.
+```{r}
+library(randtoolbox)
+
+```
+Run sobol() first time with the default set for parameter init=T.
+
+```{r}
+my.seed<-10
+set.seed(my.seed)
+nSample<-10
+xy<-sobol(nSample,dim=2,init=T)*100
+```
+
+Then make init=F if you want to generate different sample every time or keep it equal to T if you want repeated samples.
+
+```{r}
+my.seed <- 123
+nSample<-12500
+xy<-sobol(nSample,dim=2,init=T,scrambling = T,seed=my.seed)*100
+
+plot(xy)
+ScratchOffMonteCarlo(xy)
+
+```
+
+**By changing nSample and my.seed try to make the quote of the day readable, at least 12500 sample size and 85.02% open to read the words as "THe purpose of models is not to fit the data but to sharpen the questions. - Samnuel karlin"**
+
+The second method is faster than the first one. 
+
+Changing the sample size plays more significant role.
+
+## Part 5. Test
+
+```{r}
+dataPath <- getwd()
+dat <- read.csv(paste(dataPath,'Week2_Test_Sample.csv',sep="/"), header=TRUE)$x
+```
+
+
+Sample datNorm from normal distribution with mean dat[1] and standard deviation dat[2];
+```{r}
+datNorm <- qnorm(dat[4:503])*dat[2]+dat[1]
+```
+
+Sample datExp from exponential distribution with intensity dat[3].
+
+```{r}
+datExp <- qexp(dat[4:503], rate =dat[3])
+```
+
+Create matrix res with the two samples:
+
+```{r}
+res<-cbind(datNorm=datNorm,datExp=datExp)
+```
+
+Save res to a file and upload the file using left sidebar.
+
+```{r}
+write.csv(res, file = paste(dataPath,'result.csv',sep="/"), row.names = F)
+```
+
+
+
+
+
+
+

@@ -1,0 +1,455 @@
+---
+title: "Assignment5"
+author: "Yuanyuan Pan"
+date: "October 30, 2016"
+output: pdf_document
+---
+
+This assignment helps understanding estimation and inference for simple linear regression
+This assignment is individual
+
+## 1 Method 1
+### 1.1 Project data
+Analyze the second case data from file `ResidualAnalysisProjectData_2.csv`.
+Download the data.
+
+```{r}
+#LinearModel.Case2<-read.csv(file=paste(datapath,"ResidualAnalysisProjectData_2.csv",sep="/"),header=TRUE,sep=",")
+dat<-read.csv("ResidualAnalysisProjectData_2.csv",header=TRUE,sep=",")
+head(dat)
+plot(dat$Input,dat$Output, type="p",pch=19)
+nSample<-length(dat$Input)
+```
+### 1.2 Estimate linear model
+Fit linear model to the data and plot the sample and the fitted values.
+```{r}
+#Estimated.Linear.Model.Case2<-lm(Output~Input,LinearModel.Case2)
+m1<-lm(Output~Input,dat)
+m1$coefficients
+matplot(dat$Input,cbind(dat$Output,m1$fitted.values),type="p",pch=16,ylab="Sample and Fitted Values")
+summary(m1)
+
+```
+
+From the summary we can see the P-value of intercept is too large, there could be something wrong with the residuals
+
+Analize the residuals, plot the the residuals and their probability density function.
+
+```{r}
+#EstimatedResiduals.Case2<-Estimated.Linear.Model.Case2$residuals
+estimatedResiduals<-m1$residuals
+plot(dat$Input,estimatedResiduals)
+Probability.Density.Residuals<-density(estimatedResiduals)
+plot(Probability.Density.Residuals,ylim=c(0,.5))
+lines(Probability.Density.Residuals$x,
+      dnorm(Probability.Density.Residuals$x,mean=mean(estimatedResiduals),sd=sd(estimatedResiduals)))
+```
+
+From the residuals plots we can see there could be two ramdom number resources. One with larger mean and smaller standard error. And the narrow one is contained within the other one.
+
+### 1.3 Creating training sample for separation of mixed models
+
+Create training sample with `Input >= 5` and separate the points above the fitted line and below.
+
+```{r}
+
+# Create NA vectors
+Train.Sample<-data.frame(trainInput=dat$Input,trainOutput=rep(NA,nSample))
+Train.Sample.Steeper<-data.frame(trainSteepInput=dat$Input,
+                                       trainSteepOutput=rep(NA,nSample))  
+Train.Sample.Flatter<-data.frame(trainFlatInput=dat$Input,
+                                       trainFlatOutput=rep(NA,nSample))  
+```
+
+The result is: data frames `Train.Sample.Case2`, `Train.Sample.Case2.Steeper` and `Train.Sample.Case2.Flatter` with the first column equal to Input and the second column of NA.
+```{r}
+head(cbind(dat,
+           Train.Sample,
+           Train.Sample.Steeper,
+           Train.Sample.Flatter))
+```
+
+Select parts of the sample with `Input` greater than 5 and `Output` either above the estimated regression line or below it.
+
+```{r}
+# Create selectors
+Train.Sample.Selector<-dat$Input>=5
+Train.Sample.Steeper.Selector<-Train.Sample.Selector&
+  (dat$Output>m1$fitted.values)
+Train.Sample.Flatter.Selector<-Train.Sample.Selector&
+  (dat$Output<=m1$fitted.values)
+```
+
+Create training samples for steep and flat slopes.
+
+```{r}
+# Select subsamples
+Train.Sample[Train.Sample.Selector,2]<-dat[Train.Sample.Selector,2]
+Train.Sample.Steeper[Train.Sample.Steeper.Selector,2]<-dat[Train.Sample.Steeper.Selector,2]
+Train.Sample.Flatter[Train.Sample.Flatter.Selector,2]<-dat[Train.Sample.Flatter.Selector,2]
+head(Train.Sample)
+```
+
+Data frame `Train.Sample` satisfies condition `dat$Input>=5`.
+Check what are the resulting training samples.
+
+```{r}
+head(cbind(dat,
+           Train.Sample,
+           Train.Sample.Steeper,
+           Train.Sample.Flatter),10)
+plot(Train.Sample$trainInput,Train.Sample$trainOutput,pch=16,ylab="Training Sample Output",
+     xlab="Training Sample Input")
+points(Train.Sample.Steeper$trainSteepInput,Train.Sample.Steeper$trainSteepOutput,pch=20,col="green")
+points(Train.Sample.Flatter$trainFlatInput,Train.Sample.Flatter$trainFlatOutput,pch=20,col="blue")
+```
+
+### 1.4 Fit linear models to train samples
+
+Fit linear models to both training samples, interpret the summaries of both models.
+
+```{r}
+Train.Sample.Flat.lm <- lm(trainFlatOutput~trainFlatInput, data = Train.Sample.Flatter)
+Train.Sample.Steep.lm <- lm(trainSteepOutput~trainSteepInput, data = Train.Sample.Steeper)
+summary(Train.Sample.Steep.lm)$coefficients
+summary(Train.Sample.Steep.lm)$sigma
+summary(Train.Sample.Steep.lm)$df
+summary(Train.Sample.Steep.lm)$r.squared
+summary(Train.Sample.Steep.lm)$adj.r.squared
+summary(Train.Sample.Steep.lm)$fstatistic
+summary(Train.Sample.Flat.lm)$coefficients
+summary(Train.Sample.Flat.lm)$sigma
+summary(Train.Sample.Flat.lm)$df
+summary(Train.Sample.Flat.lm)$r.squared
+summary(Train.Sample.Flat.lm)$adj.r.squared
+summary(Train.Sample.Flat.lm)$fstatistic
+```
+
+Print out the coefficients of both models for the training sample.
+
+```{r}
+rbind(Steeper.Coefficients=Train.Sample.Steep.lm$coefficients,
+      Flatter.Coefficients=Train.Sample.Flat.lm$coefficients)
+```
+
+Plot the entire sample with the fitted regression lines estimated from both training subsamples.
+
+```{r}
+plot(dat$Input,dat$Output, type="p",pch=19)
+lines(dat$Input,predict(Train.Sample.Steep.lm,
+                        data.frame(trainSteepInput=dat$Input),
+                        interval="prediction")[,1],col="red",lwd=3)
+lines(dat$Input,predict(Train.Sample.Flat.lm,data.frame(trainFlatInput=dat$Input),
+                        interval="prediction")[,1],col="green",lwd=3)
+```
+
+Separate the entire sample using the estimated train linear models.
+Define distances from each point to both regression lines.
+
+```{r}
+
+# Define the distances from each Output point to both estimated training lines
+Distances.to.Steeper<-abs(dat$Output-
+                            dat$Input*Train.Sample.Steep.lm$coefficients[2]-
+                            Train.Sample.Steep.lm$coefficients[1])
+Distances.to.Flatter<-abs(dat$Output-
+                           dat$Input*Train.Sample.Flat.lm$coefficients[2]-
+                           Train.Sample.Flat.lm$coefficients[1])
+```
+
+Define separating sequence which equals TRUE if observation belongs to model with steeper slope and FALSE otherwise.
+
+```{r}
+# Define the unscramble sequence
+Unscrambling.Sequence.Steeper<-Distances.to.Steeper<Distances.to.Flatter
+```
+
+Separate the sample into steeper and flatter parts.
+Create data frames.
+
+```{r}
+
+# Define  two subsamples with NAs in the Output columns
+Subsample.Steeper<-data.frame(steeperInput=dat$Input,steeperOutput=rep(NA,nSample))
+Subsample.Flatter<-data.frame(flatterInput=dat$Input,flatterOutput=rep(NA,nSample))
+
+```
+
+Fill in the data frames.
+
+```{r}
+# Fill in the unscrambled outputs instead of NAs where necessary
+Subsample.Steeper[Unscrambling.Sequence.Steeper,2]<-dat[Unscrambling.Sequence.Steeper,2]
+Subsample.Flatter[!Unscrambling.Sequence.Steeper,2]<-dat[!Unscrambling.Sequence.Steeper,2]
+
+# Check the first rows
+head(cbind(dat,Subsample.Steeper,Subsample.Flatter))
+```
+
+plot the two samples
+
+```{r}
+# Plot the unscrambled subsamples, include the original entire sample as a check
+matplot(dat$Input,cbind(dat$Output,
+                        Subsample.Steeper$steeperOutput,
+                        Subsample.Flatter$flatterOutput),
+        type="p",col=c("black","green","blue"),
+        pch=16,ylab="Separated Subsamples")
+```
+
+```{r}
+# Mixing Probability Of Steeper Slope
+(Mixing.Probability.Of.Steeper.Slope<-sum(Unscrambling.Sequence.Steeper)/length(Unscrambling.Sequence.Steeper))
+```
+
+```{r}
+binom.test(sum(Unscrambling.Sequence.Steeper),nSample, p =0.5, alternative = "two.sided")
+```
+
+### 1.5 Fitting the models to seperated samples
+```{r}
+Linear.Model.Steeper.Recovered <- lm(steeperOutput ~ steeperInput, data = Subsample.Steeper)
+Linear.Model.Flatter.Recovered <- lm(flatterOutput ~ flatterInput, data = Subsample.Flatter)
+rbind(Steeper.Coefficients=Linear.Model.Steeper.Recovered$coefficients,
+      Flatter.Coefficients=Linear.Model.Flatter.Recovered$coefficients)
+summary(Linear.Model.Steeper.Recovered)$r.sq
+summary(Linear.Model.Flatter.Recovered)$r.sq
+
+#1.6 Analyze the residuals
+# Plot residuals
+matplot(dat$Input,cbind(c(summary(Linear.Model.Steeper.Recovered)$residuals,
+                         summary(Linear.Model.Flatter.Recovered)$residuals),
+                       estimatedResiduals),type="p",pch=c(19,16),ylab="Residuals before and after unscrambling")
+legend("bottomleft",legend=c("Before","After"),col=c("red","black"),pch=16)
+
+# Estimate standard deviations
+unmixedResiduals<-c(summary(Linear.Model.Steeper.Recovered)$residuals,
+                                   summary(Linear.Model.Flatter.Recovered)$residuals)
+apply(cbind(ResidualsAfter=unmixedResiduals,
+           ResidualsBefore=estimatedResiduals),2,sd)
+suppressWarnings(library(fitdistrplus))
+hist(unmixedResiduals)
+(residualsParam<-fitdistr(unmixedResiduals,"normal"))
+
+ks.test(unmixedResiduals,"pnorm",residualsParam$estimate[1],residualsParam$estimate[2])
+qqnorm(unmixedResiduals)
+qqline(unmixedResiduals)
+
+# Slopes
+c(Steeper.SLope=Linear.Model.Steeper.Recovered$coefficients[2],Flatter.Slope=Linear.Model.Flatter.Recovered$coefficients[2])
+# Intercepts
+c(Steeper.Intercept=Linear.Model.Steeper.Recovered$coefficients[1],Flatter.Intercept=Linear.Model.Flatter.Recovered$coefficients[1])
+```
+
+## 2 Alternative Method Based on Volatility Clustering
+
+If the sample is \(<y_1,\ldots,y_n>\) then estimate of variance is built by averaging terms \((y_i - \bar{y})^2\) as \[\hat{\sigma}^2 = \frac{1}{n-1}\sum_{i=1}^n (y_i - \bar{y})^2.\]
+Make a plot of squared deviations \(z_i=(y_i - \bar{y})^2\).
+
+```{r}
+plot(dat$Input,(dat$Output-mean(dat$Output))^2, type="p",pch=19,
+     ylab="Squared Deviations")
+
+
+```
+
+Hint. Find \(\bar{y}\) using model expression \[y_i = \beta_0 + \beta_1 x_i + \epsilon_i.\] Then substitute \(\hat{\beta}_0,~\hat{\beta_1}\) estimated by linear model and form \((y_i-\bar{y})^2\)
+
+```{r}
+clusteringParabola <- (m1$fitted.values - mean(m1$fitted.values))^2
+
+plot(dat$Input,(dat$Output-mean(dat$Output))^2, type="p",pch=19,
+     ylab="Squared Deviations")
+points(dat$Input,clusteringParabola,pch=19,col="red")
+```
+
+Define the separating sequence `Unscrambling.Sequence.Steeper.var`, such that it is equal to `TRUE` for steeper slope subsample and `FALSE` for flatter slope subsample.
+
+```{r}
+Unscrambling.Sequence.Steeper.var <- (dat$Output-mean(dat$Output))^2 >  (m1$fitted.values - mean(m1$fitted.values))^2
+head(Unscrambling.Sequence.Steeper.var,10)
+```
+
+Separate the sample into steeper and flatter part. Create data frames. Define two subsamples with NAs in the Output columns
+
+```{r}
+Subsample.Steeper.var<-
+  data.frame(steeperInput.var=dat$Input,steeperOutput.var=rep(NA,nSample))
+Subsample.Flatter.var<-
+  data.frame(flatterInput.var=dat$Input,flatterOutput.var=rep(NA,nSample))
+```
+
+Fill in the unscrambled outputs instead of NAs where necessary
+
+```{r}
+Subsample.Steeper.var[Unscrambling.Sequence.Steeper.var,2]<-
+  dat[Unscrambling.Sequence.Steeper.var,2]
+Subsample.Flatter.var[!Unscrambling.Sequence.Steeper.var,2]<-
+  dat[!Unscrambling.Sequence.Steeper.var,2]
+
+# Check the first 10 rows
+head(cbind(dat,Subsample.Steeper.var,Subsample.Flatter.var),10)
+```
+
+Plot clusters of the variance data and the separating parabola
+
+```{r}
+plot(dat$Input,
+     (dat$Output-mean(dat$Output))^2,
+     type="p",pch=19,ylab="Squared Deviations")
+points(dat$Input,clusteringParabola,pch=19,col="red")
+points(dat$Input[Unscrambling.Sequence.Steeper.var],
+       (dat$Output[Unscrambling.Sequence.Steeper.var]-
+          mean(dat$Output))^2,
+       pch=19,col="blue")
+points(dat$Input[!Unscrambling.Sequence.Steeper.var],
+       (dat$Output[!Unscrambling.Sequence.Steeper.var]-
+          mean(dat$Output))^2,
+       pch=19,col="green")
+```
+
+
+Plot the unscrambled subsamples, include the original entire sample as a check.
+
+```{r}
+excludeMiddle<-(dat$Input<=mean(dat$Input)-0)|
+                (dat$Input>=mean(dat$Input)+0)
+matplot(dat$Input[excludeMiddle],cbind(dat$Output[excludeMiddle],
+                                       Subsample.Steeper.var$steeperOutput.var[excludeMiddle],
+                                       Subsample.Flatter.var$flatterOutput.var[excludeMiddle]),
+        type="p",col=c("black","green","blue"),
+        pch=16,ylab="Separated Subsamples")
+```
+
+Note that observations corresponding to the minimum of the variance data are difficult to separate.
+
+Consider omitting some observations around that point.
+
+For example, make omitted interval equal to `LeftBound`=-0.5, `RightBound`=0.5.
+
+```{r}
+excludeMiddle<-(dat$Input<=mean(dat$Input)-0.5)|
+                (dat$Input>=mean(dat$Input)+0.5)
+matplot(dat$Input[excludeMiddle],cbind(dat$Output[excludeMiddle],
+                                       Subsample.Steeper.var$steeperOutput.var[excludeMiddle],
+                                       Subsample.Flatter.var$flatterOutput.var[excludeMiddle]),
+        type="p",col=c("black","green","blue"),
+        pch=16,ylab="Separated Subsamples")
+```
+
+Fit linear models to the separated samples.
+
+```{r}
+dat.Steep.var <- lm(Subsample.Steeper.var$steeperOutput.var[excludeMiddle]~dat$Input[excludeMiddle])
+dat.Flat.var <- lm(Subsample.Flatter.var$flatterOutput.var[excludeMiddle]~dat$Input[excludeMiddle])
+
+```
+
+Plot the data and the estimated regression lines
+
+```{r}
+plot(dat$Input,dat$Output)
+abline(dat.Steep.var, col = "red")
+abline(dat.Flat.var, col = "green")
+```
+
+
+Print estimated parameters and summaries of both models
+
+
+```{r}
+rbind(Steeper.Coefficients.var=dat.Steep.var$coefficients,
+      Flatter.Coefficients.var=dat.Flat.var$coefficients)
+summary(dat.Steep.var)
+summary(dat.Flat.var)
+```
+
+Plot residuals from the combined model and the models for separated samples
+
+```{r}
+matplot(dat$Input[excludeMiddle],
+        cbind(c(summary(dat.Steep.var)$residuals,
+                summary(dat.Flat.var)$residuals),
+              estimatedResiduals[excludeMiddle]),
+        type="p",pch=c(19,16),ylab="Residuals before and after unscrabling")
+```
+
+## Test
+```{r}
+dat <- read.table('Week5_Test_Sample.csv', header=TRUE)
+head(dat)
+GeneralModel <- lm(Output ~ Input, data = dat)
+estimatedResiduals <- GeneralModel$residuals
+summary(GeneralModel)
+
+plot(dat$Input,dat$Output)
+abline(GeneralModel, col = "red")
+
+plot(dat$Input,GeneralModel$residuals)
+
+plot(dat$Input,(dat$Output-mean(dat$Output))^2, type="p",pch=19,
+     ylab="Squared Deviations")
+clusteringParabola <- (GeneralModel$fitted.values - mean(GeneralModel$fitted.values))^2
+
+plot(dat$Input,(dat$Output-mean(dat$Output))^2, type="p",pch=19,
+     ylab="Squared Deviations")
+points(dat$Input,clusteringParabola,pch=19,col="red")
+
+Unscrambling.Sequence.Steeper.var <- (dat$Output-mean(dat$Output))^2 >  (GeneralModel$fitted.values - mean(GeneralModel$fitted.values))^2
+
+head(Unscrambling.Sequence.Steeper.var,10)
+nSample <- length(dat$Output)
+
+Subsample.Steeper.var<-
+  data.frame(steeperInput.var=dat$Input,steeperOutput.var=rep(NA,nSample))
+Subsample.Flatter.var<-
+  data.frame(flatterInput.var=dat$Input,flatterOutput.var=rep(NA,nSample))
+
+
+Subsample.Steeper.var[Unscrambling.Sequence.Steeper.var,2]<-
+  dat[Unscrambling.Sequence.Steeper.var,1]
+Subsample.Flatter.var[!Unscrambling.Sequence.Steeper.var,2]<-
+  dat[!Unscrambling.Sequence.Steeper.var,1]
+
+plot(Subsample.Flatter.var$flatterInput.var,Subsample.Flatter.var$flatterOutput.var)
+plot(Subsample.Steeper.var$steeperInput.var,Subsample.Steeper.var$steeperOutput.var)
+# Check the first 10 rows
+head(cbind(dat,Subsample.Steeper.var,Subsample.Flatter.var),10)
+
+plot(dat$Input,
+     (dat$Output-mean(dat$Output))^2,
+     type="p",pch=19,ylab="Squared Deviations")
+points(dat$Input,clusteringParabola,pch=19,col="red")
+points(dat$Input[Unscrambling.Sequence.Steeper.var],
+       (dat$Output[Unscrambling.Sequence.Steeper.var]-
+          mean(dat$Output))^2,
+       pch=19,col="blue")
+points(dat$Input[!Unscrambling.Sequence.Steeper.var],
+       (dat$Output[!Unscrambling.Sequence.Steeper.var]-
+          mean(dat$Output))^2,
+       pch=19,col="green")
+
+excludeMiddle<-(dat$Input<=mean(dat$Input)-0)|
+                (dat$Input>=mean(dat$Input)+0)
+matplot(dat$Input[excludeMiddle],cbind(dat$Output[excludeMiddle],
+                                       Subsample.Steeper.var$steeperOutput.var[excludeMiddle],
+                                       Subsample.Flatter.var$flatterOutput.var[excludeMiddle]),
+        type="p",col=c("black","blue","green"),
+        pch=16,ylab="Separated Subsamples")
+
+excludeMiddle<-(dat$Input<=mean(dat$Input)-0.5)|
+                (dat$Input>=mean(dat$Input)+0.5)
+matplot(dat$Input[excludeMiddle],cbind(dat$Output[excludeMiddle],
+                                       Subsample.Steeper.var$steeperOutput.var[excludeMiddle],
+                                       Subsample.Flatter.var$flatterOutput.var[excludeMiddle]),
+        type="p",col=c("black","blue","green"),
+        pch=16,ylab="Separated Subsamples")
+
+mSteep <- lm(Subsample.Steeper.var$steeperOutput.var[excludeMiddle]~Subsample.Steeper.var$steeperInput.var[excludeMiddle])
+mFlat <- lm(Subsample.Flatter.var$flatterOutput.var[excludeMiddle]~Subsample.Flatter.var$flatterInput.var[excludeMiddle])
+
+res <- list( GeneralModel = GeneralModel,mSteep = mFlat,mFlat = mSteep)
+dataPath <- getwd()
+saveRDS(res, file = paste(dataPath,'result.rds',sep = '/'))
+
+```

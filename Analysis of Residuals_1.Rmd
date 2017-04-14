@@ -1,0 +1,276 @@
+---
+title: "Analysis of Residuals of a Linear Model"
+author: "Yuanyuan Pan"
+date: "October 23, 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Analysis of Residuals of a Linear Model
+
+This project helps understanding analysis of residuals of the estimated linear model
+
+
+### Case 1
+
+```{r}
+datapath<- getwd()
+LinearModelData<-read.csv(file=paste(datapath,"LinearModelCase1.csv",sep="/"))
+head(LinearModelData)
+```
+
+Plot the data
+
+```{r}
+plot(LinearModelData$Input,LinearModelData$Output)
+```
+
+Estimate linear model using function `lm()` look at the output of the function
+
+```{r}
+Estimated.LinearModel <- lm(Output ~ Input,data=LinearModelData)
+names(Estimated.LinearModel)
+```
+
+#### Coefficients
+
+```{r}
+Estimated.LinearModel$coefficients
+```
+
+#### Residual plot
+
+Residual is calculated as the difference between the estimated value of output and the real value of output. $error = \hat{Y} - Y$
+
+```{r}
+plot(Estimated.LinearModel$residuals)
+
+```
+
+#### find out what `fitted.values`
+
+```{r}
+plot(Estimated.LinearModel$fitted.values)
+plot(Estimated.LinearModel$fitted.values, LinearModelData$Input)
+```
+
+`Fitted.value` is the estimated/predicted value of the output.
+
+Look at the Summary 
+
+```{r}
+summary(Estimated.LinearModel)
+```
+
+#### Interpret the summary
+
+```{r}
+names(summary(Estimated.LinearModel))
+```
+
+`summary(Estimated.LinearModel)$sigma` is the estimated standard deviation of the randon variable in linear regression model.
+
+```{r}
+summary(Estimated.LinearModel)$sigma
+summary(Estimated.LinearModel)$sigma^2
+```
+
+#### Check Process
+
+```{r}
+sigmaSquared.byVar <- var(Estimated.LinearModel$residuals)*(length(LinearModelData[,1])-1)/(length(LinearModelData[,1])-2)
+sigmaSquared.bySum <- sum(Estimated.LinearModel$residuals^2)/(length(Estimated.LinearModel$residuals)-2)
+c(sigmaSquared.byVar=sigmaSquared.byVar,sigmaSquared.bySum=sigmaSquared.bySum,fromModel=summary(Estimated.LinearModel)$sigma^2)
+
+```
+
+Observe the residuals, plot them against the input, , and their probability density in comparison with the normal density
+
+
+```{r}
+Estimated.Residuals <- Estimated.LinearModel$residuals
+plot(LinearModelData$Input, Estimated.Residuals)
+Probability.Density.Residuals <- density(Estimated.Residuals)
+plot(Probability.Density.Residuals, ylim = c(0, 0.5))
+lines(Probability.Density.Residuals$x, dnorm(Probability.Density.Residuals$x, 
+    mean = mean(Estimated.Residuals), sd = sd(Estimated.Residuals)))
+```
+
+From the analysis of residuals, we can see there is a gap in the middle of two peak of the density curve, which means the residual could be from a combination of two normal distribution with different mean. 
+
+```{r}
+c(Left.Mean = mean(Estimated.Residuals[Estimated.Residuals < 0]), 
+  Right.Mean = mean(Estimated.Residuals[Estimated.Residuals > 0]))
+```
+
+Separate the given sample into 2 subsamples: one, for which the residuals are below zero and another, for which they are above zero. Create variable `Unscrambled.Selection.Sequence` estimating switching between the two subsamples (1 corresponds to the positive residual case and 0 corresponds to the negative residual case).
+```{r}
+Unscrambled.Selection.Sequence <- as.numeric(Estimated.LinearModel$residuals >0)
+
+head(Unscrambled.Selection.Sequence,30)
+
+```
+
+Matrix `LinearModel1.Recovered` contains all rows of the original data for which residuals are greater than zero.
+Matrix `LinearModel2.Recovered` contains all rows of the original data for which residuals are less than zero.
+
+```{r}
+LinearModel1.Recovered <- LinearModelData
+LinearModel1.Recovered[Unscrambled.Selection.Sequence == 0,] <-  NA
+LinearModel2.Recovered <- LinearModelData
+LinearModel2.Recovered[Unscrambled.Selection.Sequence == 1,] <-  NA
+
+head(cbind(LinearModel1.Recovered,LinearModel2.Recovered),30)
+
+#Plot two clusters
+matplot(LinearModelData$Input, cbind(LinearModel1.Recovered[, 2], LinearModel2.Recovered[,2]), 
+        type = "p", col = c("green", "blue"), pch = 19, ylab = "Separated Subsamples")
+
+plot(Unscrambled.Selection.Sequence[1:100], type = "s")
+
+```
+
+Now estimate the linear models from the subsamples.
+
+```{r}
+
+LinearModel1.Recovered.lm <- lm(Output ~ Input, data = na.omit(LinearModel1.Recovered))
+LinearModel2.Recovered.lm <- lm(Output ~ Input, data = na.omit(LinearModel2.Recovered))
+```
+
+Compare the results of fitting of the first recovered linear model:
+
+```{r}
+summary(LinearModel1.Recovered.lm)$coefficients
+summary(LinearModel1.Recovered.lm)$sigma
+summary(LinearModel1.Recovered.lm)$df
+summary(LinearModel1.Recovered.lm)$r.squared
+summary(LinearModel1.Recovered.lm)$adj.r.squared
+summary(LinearModel2.Recovered.lm)$coefficients
+summary(LinearModel2.Recovered.lm)$sigma
+summary(LinearModel2.Recovered.lm)$df
+summary(LinearModel2.Recovered.lm)$r.squared
+summary(LinearModel2.Recovered.lm)$adj.r.squared
+```
+
+with the summary of the fit to the whole sample.
+
+The sigma parameters:
+```{r}
+c(summary(Estimated.LinearModel)$sigma,
+  summary(LinearModel1.Recovered.lm)$sigma,
+  summary(LinearModel2.Recovered.lm)$sigma)
+```
+
+The $\rho^2$:
+
+```{r}
+c(summary(Estimated.LinearModel)$r.squared,
+  summary(LinearModel1.Recovered.lm)$r.squared,
+  summary(LinearModel2.Recovered.lm)$r.squared)
+```
+
+The F-statistics:
+
+```{r}
+rbind(LinearModel=summary(Estimated.LinearModel)$fstatistic,
+      LinearModel1.Recovered=summary(LinearModel1.Recovered.lm)$fstatistic,
+      LinearModel2.Recovered=summary(LinearModel2.Recovered.lm)$fstatistic)
+```
+
+Here is how we can calculate p-values of F-test using cumulative probability function of F-distribution:
+
+```{r}
+c(LinearModel=pf(summary(Estimated.LinearModel)$fstatistic[1], 
+                 summary(Estimated.LinearModel)$fstatistic[2], 
+                 summary(Estimated.LinearModel)$fstatistic[3],lower.tail = FALSE),
+  LinearModel1.Recovered=pf(summary(LinearModel1.Recovered.lm)$fstatistic[1], 
+                            summary(LinearModel1.Recovered.lm)$fstatistic[2], 
+                            summary(LinearModel1.Recovered.lm)$fstatistic[3],lower.tail = FALSE),
+  LinearModel2.Recovered=pf(summary(LinearModel2.Recovered.lm)$fstatistic[1], 
+                            summary(LinearModel2.Recovered.lm)$fstatistic[2], 
+                            summary(LinearModel2.Recovered.lm)$fstatistic[3],lower.tail = FALSE))
+```
+
+The numbers may not look exactly the same as in `summary()` because of the precision limitation.
+
+Compare the combined residuals of the two separated models with the residuals of `Estimated.LinearModel`
+
+```{r}
+# Plot residuals
+matplot(cbind(MixedModel.residuals=c(summary(LinearModel1.Recovered.lm)$residuals,
+                                     summary(LinearModel2.Recovered.lm)$residuals),
+              Single.Model.residuals=summary(Estimated.LinearModel)$residuals),
+        type="p",pch=16,ylab="Residuals before and after unscrambling")
+
+# Estimate standard deviations
+apply(cbind(MixedModel.residuals=c(summary(LinearModel1.Recovered.lm)$residuals,
+                                   summary(LinearModel2.Recovered.lm)$residuals),
+            Single.Model.residuals=summary(Estimated.LinearModel)$residuals),2,sd)
+```
+
+The MixedModel model has much lower variance of residual, with better fitness. 
+
+The difference between the two estimated models are 
+
+* Single Model has only one group of parameters, while Mixed Model has two groups of parameters.
+* Single Model has only one random variable in model, while Mixed model has mixed randon variable in the model.
+* The estimation of single Model's intercept is not significant
+
+This model data could be simulated with a Bernoulli trial with 0.5 probability for head. Once get a head, take the random variable 1 as randon variable; and if get a tail, take the random variable 2.
+ 
+## Case 2
+
+### 1. Estimate linear model
+Read data from the file
+
+```{r}
+datapath <- getwd()
+LinearModelData2<-read.csv(file=paste(datapath,"LinearModelCase2.csv",sep="/"))
+head(LinearModelData2)
+```
+
+Estimate the data through linear regression, and report the result
+
+```{r}
+Estimated.LinearModel2 <- lm(LinearModel.Case2.Export ~ X, data = LinearModelData2)
+```
+
+### 2. Analize the rezults of fitting
+
+```{r}
+summary(Estimated.LinearModel2)
+```
+From the result above, we could see that the estimate of intercept failed to pass the t test. 
+
+
+### 3. Analize the residuals
+
+Plot the residual and the density to find possible reason
+
+```{r}
+plot(Estimated.LinearModel2$residuals)
+Estimated.Residuals2 <- Estimated.LinearModel2$residuals
+plot(LinearModelData2$X, Estimated.Residuals2)
+Probability.Density.Residuals2 <- density(Estimated.Residuals2)
+plot(Probability.Density.Residuals2, ylim = c(0, 0.5))
+lines(Probability.Density.Residuals2$x, dnorm(Probability.Density.Residuals2$x, mean = mean(Estimated.Residuals2), sd = sd(Estimated.Residuals2)))
+```
+
+From the residual's plot we can see that in the middle of the density, there is one more heavy density line. From the density plot we can also see that within a normal curve, there is one part higher than other, which looks like another normal curve appears.
+
+
+### 4. Try to explain the differences between the two cases
+
+The difference between the two cases are that, in the second case, the two mixed random variable are not clearly seperated. Instead, one random variable with smaller variance is within the other variable with larger variance. It's difficult to seperate the two.
+
+### 5. Try to guess how the data of the second case were simulated and with what parameters
+
+The second case could be simulated through the similar way as the case. With Bernoulli trial with 0.5 probability for head. Once get a head, take the random variable 1 as randon variable; and if get a tail, take the random variable 2. 
+
+The difference is that the two random variables are different from the case 1. One variable with have around mean 0 with larger variance, while the other with mean a little bit above 0, but with smaller variance. 
